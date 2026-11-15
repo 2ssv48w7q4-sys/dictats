@@ -173,6 +173,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <div class="grid">
       <label class="check" for="punct"><input id="punct" type="checkbox"><span>Dictar la puntuació<small>Diu «coma», «punt»… en veu alta (català, castellà, anglès, francès, alemany, italià i portuguès).</small></span></label>
       <label class="check" for="show"><input id="show" type="checkbox"><span>Mostrar la frase a la pantalla<small>Desmarcat, l'alumne només sent el text.</small></span></label>
+      <label class="check" for="lines"><input id="lines" type="checkbox"><span>Cada línia és un fragment<small>Llegeix cada línia sencera, sense tallar-la més.</small></span></label>
     </div>
 
     <div class="btn-row">
@@ -213,7 +214,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   var $ = function (id) { return document.getElementById(id); };
   var el = {
     text: $('text'), lang: $('lang'), voice: $('voice'), rate: $('rate'), rateVal: $('rate-val'),
-    p1: $('p1'), p2: $('p2'), punct: $('punct'), show: $('show'), recipe: $('recipe'),
+    p1: $('p1'), p2: $('p2'), punct: $('punct'), show: $('show'), lines: $('lines'), recipe: $('recipe'),
     countSentences: $('count-sentences'), start: $('start'), test: $('test'), warn: $('warn'),
     setup: $('setup'), player: $('player'), ring: $('ring'), arc: $('arc'), count: $('count'),
     phase: $('phase'), sub: $('sub'), fill: $('fill'), sentence: $('sentence'),
@@ -283,6 +284,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       if (b >= 0 && b <= 60) el.p2.value = String(b);
       if (q.has('punct')) el.punct.checked = q.get('punct') === '1';
       if (q.has('show')) el.show.checked = q.get('show') === '1';
+      if (q.has('seg')) el.lines.checked = q.get('seg') === 'l';
     } catch (e) {}
   })();
 
@@ -337,15 +339,42 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function langCode() { return el.lang.value || 'ca'; }
 
   /* ---------- text ---------- */
+  var CONNECT = /^(i|però|perquè|que|quan|mentre|on|com|si|sinó|encara|y|e|pero|porque|cuando|mientras|donde|aunque|sino|and|but|because|when|while|where|which|who|although|so|et|mais|quand|lorsque|donc|und|aber|weil|wenn|dass|ma|perché|quando|mas|enquanto)$/i;
+  function chunkLong(s) {
+    var w = s.split(/\s+/).filter(Boolean);
+    if (w.length <= 17) return [s];
+    var out = [], cur = [];
+    for (var i = 0; i < w.length; i++) {
+      var word = w[i];
+      var left = w.length - i;
+      if (cur.length >= 13 && left >= 5 && CONNECT.test(word.replace(/[^\p{L}]/gu, ''))) { out.push(cur.join(' ')); cur = []; }
+      cur.push(word);
+      left = w.length - i - 1;
+      if (cur.length >= 13 && left >= 5 && /[,;:]$/.test(word)) { out.push(cur.join(' ')); cur = []; }
+      else if (cur.length >= 17 && left >= 5) { out.push(cur.join(' ')); cur = []; }
+    }
+    if (cur.length) {
+      if (out.length && cur.length < 5) out[out.length - 1] += ' ' + cur.join(' ');
+      else out.push(cur.join(' '));
+    }
+    return out;
+  }
   function splitText(t) {
     var out = [];
+    if (el.lines.checked) {
+      t.replace(/\r/g, '').split(/\n+/).forEach(function (line) {
+        var l = line.trim();
+        if (l && /[\p{L}\p{N}]/u.test(l)) out.push(l);
+      });
+      return out;
+    }
     t.replace(/\r/g, '').split(/\n+/).forEach(function (line) {
       var l = line.trim();
       if (!l) return;
       var m = l.match(/(?:[^.!?…]|\.(?=\d))+(?:[.!?…]+["»”)]*|$)/g) || [l];
       m.forEach(function (x) {
         var y = x.trim();
-        if (y && /[\p{L}\p{N}]/u.test(y)) out.push(y);
+        if (y && /[\p{L}\p{N}]/u.test(y)) chunkLong(y).forEach(function (c) { out.push(c); });
       });
     });
     return out;
@@ -443,8 +472,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           setMode('read', 'Lectura final', 'Segueix el text i comprova el que has escrit');
           showSentence('');
           el.fill.style.width = '100%';
-          await speak(spoken(fullText));
-          if (!alive()) return;
+          for (var k = 0; k < sentences.length; k++) {
+            await speak(spoken(sentences[k]));
+            if (!alive()) return;
+          }
           step.p = 1;
         }
         finish();
@@ -556,6 +587,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- connexions ---------- */
   el.text.addEventListener('input', renderCounts);
+  el.lines.addEventListener('change', renderCounts);
   el.rate.addEventListener('input', renderRate);
   el.p1.addEventListener('input', renderRecipe);
   el.p2.addEventListener('input', renderRecipe);
