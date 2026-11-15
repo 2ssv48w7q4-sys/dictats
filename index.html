@@ -329,8 +329,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var b = el.lang.value;
     var keep = el.voice.value || prefs.voice || '';
     el.voice.innerHTML = '';
-    voices.forEach(function (v, idx) {
-      if (baseOf(v) !== b) return;
+    var list = [];
+    voices.forEach(function (v, idx) { if (baseOf(v) === b) list.push({ v: v, idx: idx }); });
+    var google = list.filter(function (x) { return /google/i.test(x.v.name); });
+    if (google.length) list = google;
+    list.forEach(function (x) {
+      var v = x.v, idx = x.idx;
       var o = document.createElement('option');
       o.value = String(idx);
       o.textContent = v.name + ' (' + norm(v.lang) + ')';
