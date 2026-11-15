@@ -261,7 +261,39 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     pt: ['pt_PT-tugão-medium', 'Tugão']
   };
   var TTS_URL = 'https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm';
-  var SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  /* WAV de 16 bits: afegeix silenci al principi i al final, i una entrada suau */
+  function buildWav(pcm, sr, ch, leadSec, tailSec) {
+    var bpf = ch * 2;
+    var lead = Math.round(sr * leadSec) * ch, tail = Math.round(sr * tailSec) * ch;
+    var total = (lead + pcm.length + tail) * 2;
+    var out = new ArrayBuffer(44 + total), o = new DataView(out);
+    function str(pos, t) { for (var k = 0; k < 4; k++) o.setUint8(pos + k, t.charCodeAt(k)); }
+    str(0, 'RIFF'); o.setUint32(4, 36 + total, true); str(8, 'WAVE');
+    str(12, 'fmt '); o.setUint32(16, 16, true); o.setUint16(20, 1, true); o.setUint16(22, ch, true);
+    o.setUint32(24, sr, true); o.setUint32(28, sr * bpf, true); o.setUint16(32, bpf, true); o.setUint16(34, 16, true);
+    str(36, 'data'); o.setUint32(40, total, true);
+    new Int16Array(out, 44 + lead * 2, pcm.length).set(pcm);
+    return new Blob([out], { type: 'audio/wav' });
+  }
+  function padWav(blob) {
+    return blob.arrayBuffer().then(function (ab) {
+      var dv = new DataView(ab);
+      if (ab.byteLength < 44 || dv.getUint32(0, false) !== 0x52494646) return blob;
+      var off = 12, fmt = null, dataOff = -1, dataLen = 0;
+      while (off + 8 <= dv.byteLength) {
+        var id = dv.getUint32(off, false), len = dv.getUint32(off + 4, true);
+        if (id === 0x666d7420) fmt = { ch: dv.getUint16(off + 10, true), sr: dv.getUint32(off + 12, true), bits: dv.getUint16(off + 22, true) };
+        if (id === 0x64617461) { dataOff = off + 8; dataLen = Math.min(len, dv.byteLength - dataOff); break; }
+        off += 8 + len + (len % 2);
+      }
+      if (!fmt || dataOff < 0 || fmt.bits !== 16) return blob;
+      var pcm = new Int16Array(ab.slice(dataOff, dataOff + dataLen - (dataLen % 2)));
+      var fade = Math.min(pcm.length, Math.round(fmt.sr * 0.02) * fmt.ch);
+      for (var i = 0; i < fade; i++) pcm[i] = Math.round(pcm[i] * i / fade);
+      return buildWav(pcm, fmt.sr, fmt.ch, 0.35, 0.15);
+    }).catch(function () { return blob; });
+  }
+  var SILENT = URL.createObjectURL(buildWav(new Int16Array(0), 22050, 1, 0.1, 0));
   var ttsLib = null, neuralFailed = false, readyVoices = {}, audioCache = {};
   var player = new Audio();
   player.preload = 'auto';
@@ -299,6 +331,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (!audioCache[key]) {
       audioCache[key] = ensureVoice(id)
         .then(function (tts) { return tts.predict({ text: text, voiceId: id }); })
+        .then(padWav)
         .then(function (wav) { return URL.createObjectURL(wav); });
       audioCache[key].catch(function () { delete audioCache[key]; });
     }
