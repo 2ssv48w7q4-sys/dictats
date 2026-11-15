@@ -67,6 +67,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .check input { margin-top: 4px; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
 .check small { display: block; color: var(--muted); font-size: 0.82rem; }
 .help { font-size: 0.85rem; color: var(--muted); margin: 6px 0 0; }
+.hidden-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 10px; background: var(--bg); }
+.hidden-note p { margin: 0; color: var(--muted); max-width: 46ch; }
 
 .recipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.88rem; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--bg); white-space: nowrap; }
@@ -110,7 +112,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .sub { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .progress { width: min(360px, 100%); height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
 .progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.3s ease; }
-.sentence { margin: 0; max-width: 52ch; font-size: 1.15rem; line-height: 1.5; padding: 14px 16px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); text-align: left; }
+.sentence { white-space: pre-line; margin: 0; max-width: 52ch; font-size: 1.15rem; line-height: 1.5; padding: 14px 16px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); text-align: left; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -131,6 +133,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <span id="count-sentences" class="meta">0 frases</span>
       </div>
       <textarea id="text" spellcheck="false">Aquest matí he sortit de casa molt aviat. El carrer era buit i l'aire feia olor de pa calent. A la plaça, una dona regava les plantes del balcó. Quan he arribat a l'escola, ja sonava el timbre.</textarea>
+      <div id="hidden-note" class="hidden-note" hidden>
+        <p>El text està amagat perquè no el vegis abans d'escriure'l.</p>
+        <button id="reveal" class="btn ghost" type="button">Mostra el text</button>
+      </div>
       <p id="text-help" class="help">Text d'exemple: esborra'l i enganxa el teu. Cada frase acaba amb un punt, i cada línia nova també comença una frase.</p>
     </div>
 
@@ -172,7 +178,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
     <div class="grid">
       <label class="check" for="punct"><input id="punct" type="checkbox"><span>Dictar la puntuació<small>Diu «coma», «punt»… en veu alta (català, castellà, anglès, francès, alemany, italià i portuguès).</small></span></label>
-      <label class="check" for="show"><input id="show" type="checkbox"><span>Mostrar la frase a la pantalla<small>Desmarcat, l'alumne només sent el text.</small></span></label>
       <label class="check" for="lines"><input id="lines" type="checkbox"><span>Cada línia és un fragment<small>Llegeix cada línia sencera, sense tallar-la més.</small></span></label>
     </div>
 
@@ -199,6 +204,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <div class="progress" aria-hidden="true"><span id="fill"></span></div>
     <p id="sentence" class="sentence" hidden></p>
     <div class="btn-row" style="justify-content:center">
+      <button id="reveal-end" class="btn" type="button" hidden>Mostra el text</button>
       <button id="pause" class="btn" type="button">Pausa</button>
       <button id="again" class="btn ghost" type="button">Repeteix la frase</button>
       <button id="stop" class="btn ghost" type="button">Atura</button>
@@ -214,7 +220,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   var $ = function (id) { return document.getElementById(id); };
   var el = {
     text: $('text'), lang: $('lang'), voice: $('voice'), rate: $('rate'), rateVal: $('rate-val'),
-    p1: $('p1'), p2: $('p2'), punct: $('punct'), show: $('show'), lines: $('lines'), recipe: $('recipe'),
+    p1: $('p1'), p2: $('p2'), punct: $('punct'), lines: $('lines'), recipe: $('recipe'),
     countSentences: $('count-sentences'), start: $('start'), test: $('test'), warn: $('warn'),
     setup: $('setup'), player: $('player'), ring: $('ring'), arc: $('arc'), count: $('count'),
     phase: $('phase'), sub: $('sub'), fill: $('fill'), sentence: $('sentence'),
@@ -251,7 +257,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       if (s.p1 !== undefined) el.p1.value = s.p1;
       if (s.p2 !== undefined) el.p2.value = s.p2;
       if (typeof s.punct === 'boolean') el.punct.checked = s.punct;
-      if (typeof s.show === 'boolean') el.show.checked = s.show;
       return s;
     } catch (e) { return {}; }
   }
@@ -259,7 +264,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     try {
       localStorage.setItem(STORE, JSON.stringify({
         rate: el.rate.value, p1: el.p1.value, p2: el.p2.value,
-        punct: el.punct.checked, show: el.show.checked, lang: el.lang.value, voice: el.voice.value
+        punct: el.punct.checked, lang: el.lang.value, voice: el.voice.value
       }));
     } catch (e) {}
   }
@@ -273,7 +278,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       var t = q.get('t');
       if (t && t.trim()) {
         el.text.value = t.replace(/\r/g, '').trim();
-        $('text-help').textContent = 'Text carregat des de l\'enllaç. Pots editar-lo abans de començar.';
+        el.text.hidden = true;
+        $('text-help').hidden = true;
+        $('hidden-note').hidden = false;
       }
       if (q.has('l')) urlLang = q.get('l').toLowerCase().split(/[-_]/)[0];
       var r = parseFloat(q.get('r'));
@@ -283,7 +290,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       var b = parseFloat(q.get('p2'));
       if (b >= 0 && b <= 60) el.p2.value = String(b);
       if (q.has('punct')) el.punct.checked = q.get('punct') === '1';
-      if (q.has('show')) el.show.checked = q.get('show') === '1';
       if (q.has('seg')) el.lines.checked = q.get('seg') === 'l';
     } catch (e) {}
   })();
@@ -387,26 +393,40 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         s = s.replace(/([,;:.!?…])/g, function (m, c, off, str) {
           var a = str.charAt(off - 1), b = str.charAt(off + 1);
           if (/\d/.test(a) && /\d/.test(b)) return m;
-          return ' ' + map[m] + ', ';
+          return ', ' + map[m] + ', ';
         });
       }
     }
-    return s.replace(/\s+/g, ' ').trim();
+    return s.replace(/\s+/g, ' ').replace(/^[\s,]+/, '').replace(/(,\s*)+,/g, ',').trim();
   }
 
   /* ---------- lectura en veu alta ---------- */
-  function speak(text) {
+  function speak(text, attempt) {
+    attempt = attempt || 0;
+    var myRun = runId;
     return new Promise(function (resolve) {
       var u = new SpeechSynthesisUtterance(text);
       var v = currentVoice();
       if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = langCode(); }
       u.rate = parseFloat(el.rate.value) || 0.65;
-      var done = false, timer = null;
-      function fin() { if (done) return; done = true; clearTimeout(timer); resolve(); }
+      var done = false, timer = null, started = false, t0 = 0;
+      u.onstart = function () { started = true; };
+      function fin() {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        if (!started && attempt < 2 && myRun === runId && Date.now() - t0 < 800) {
+          setTimeout(function () {
+            if (myRun !== runId) { resolve(); return; }
+            speak(text, attempt + 1).then(resolve);
+          }, 300);
+          return;
+        }
+        resolve();
+      }
       u.onend = fin; u.onerror = fin;
       timer = setTimeout(fin, Math.max(3000, text.length * 180 / u.rate) + 2500);
       keepAlive = u;
-      function go() { try { synth.speak(u); } catch (e) { fin(); } }
+      function go() { t0 = Date.now(); try { synth.speak(u); } catch (e) { fin(); } }
       if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(go, 90); } else { go(); }
     });
   }
@@ -435,9 +455,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     el.sub.textContent = sub;
     if (mode === 'read' || mode === 'done') el.arc.style.strokeDashoffset = '0';
   }
-  function showSentence(s) {
-    if (el.show.checked && s) { el.sentence.textContent = s; el.sentence.hidden = false; }
-    else { el.sentence.hidden = true; }
+  function showSentence() {
+    el.sentence.hidden = true;
   }
   function updateProgress() {
     var n = sentences.length;
@@ -509,6 +528,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     el.sentence.hidden = true;
     el.pause.hidden = true; el.again.hidden = true;
     el.stop.textContent = 'Torna a l\'inici';
+    $('reveal-end').hidden = false;
   }
 
   function halt() {
@@ -536,6 +556,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     paused = false;
     savePrefs();
     el.stop.textContent = 'Atura';
+    $('reveal-end').hidden = true;
     view('player');
     takeLock();
     run();
@@ -601,6 +622,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     speak(spoken(s));
   });
   el.pause.addEventListener('click', togglePause);
+  $('reveal').addEventListener('click', function () {
+    el.text.hidden = false; $('hidden-note').hidden = true; $('text-help').hidden = false;
+    $('text-help').textContent = 'Text carregat des de l\'enllaç.';
+  });
+  $('reveal-end').addEventListener('click', function () {
+    el.sentence.textContent = sentences.join('\n');
+    el.sentence.hidden = false;
+    $('reveal-end').hidden = true;
+  });
   el.again.addEventListener('click', repeatSentence);
   el.stop.addEventListener('click', stop);
   document.addEventListener('visibilitychange', function () {
