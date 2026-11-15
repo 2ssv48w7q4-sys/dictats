@@ -155,15 +155,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <div>
       <div class="row-between">
         <label for="rate">Velocitat de lectura</label>
-        <span id="rate-val" class="meta">0,65×</span>
+        <span id="rate-val" class="meta">0,75×</span>
       </div>
-      <input id="rate" type="range" min="0.5" max="1.2" step="0.05" value="0.65">
+      <input id="rate" type="range" min="0.5" max="1.2" step="0.05" value="0.75">
     </div>
 
     <div class="grid">
       <div>
         <label for="p1">Pausa abans de repetir (s)</label>
-        <input id="p1" type="number" inputmode="decimal" min="0" max="60" step="0.5" value="2">
+        <input id="p1" type="number" inputmode="decimal" min="0" max="60" step="0.5" value="3">
       </div>
       <div>
         <label for="p2">Pausa abans de la frase següent (s)</label>
@@ -247,7 +247,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   var cancelWait = function () {};
   var keepAlive = null;
   var lock = null;
-  var STORE = 'dictats-pauses-v2';
+  var STORE = 'dictats-pauses-v3';
 
   /* ---------- preferències (opcional) ---------- */
   function loadPrefs() {
@@ -408,7 +408,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       var u = new SpeechSynthesisUtterance(text);
       var v = currentVoice();
       if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = langCode(); }
-      u.rate = parseFloat(el.rate.value) || 0.65;
+      u.rate = parseFloat(el.rate.value) || 0.75;
       var done = false, timer = null, started = false, t0 = 0;
       u.onstart = function () { started = true; };
       function fin() {
